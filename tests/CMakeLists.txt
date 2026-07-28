@@ -99,3 +99,15 @@ add_executable(vix_engine_configure_decision_tests
 )
 target_link_libraries(vix_engine_configure_decision_tests PRIVATE vix::engine)
 add_test(NAME vix_engine_configure_decision_tests COMMAND vix_engine_configure_decision_tests)
+
+add_executable(vix_engine_watch_tests
+  WatchTests.cpp
+)
+target_link_libraries(vix_engine_watch_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_watch_tests COMMAND vix_engine_watch_tests)
+
+add_executable(vix_engine_graph_invalidation_tests
+  GraphInvalidationTests.cpp
+)
+target_link_libraries(vix_engine_graph_invalidation_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_graph_invalidation_tests COMMAND vix_engine_graph_invalidation_tests)

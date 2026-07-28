@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cstdint>
 #include <fstream>
+#include <set>
 #include <sstream>
 #include <system_error>
 
@@ -98,6 +99,22 @@ namespace vix::engine
              name == "vix.toml" ||
              name == "vix.lock" ||
              ext == ".cmake";
+    }
+
+    static BuildNodeKind kind_for_project_input_path(const fs::path &path)
+    {
+      const std::string ext = path.extension().string();
+
+      if (is_source_extension(ext))
+        return BuildNodeKind::Source;
+
+      if (is_header_extension(ext))
+        return BuildNodeKind::Header;
+
+      if (is_config_file(path))
+        return BuildNodeKind::Config;
+
+      return BuildNodeKind::Unknown;
     }
 
     static bool should_skip_dir(const fs::path &path)
@@ -1108,6 +1125,143 @@ namespace vix::engine
         }
       }
     }
+  }
+
+  BuildGraphInvalidationResult BuildGraph::invalidate_paths(
+      const std::vector<watch::Event> &events)
+  {
+    BuildGraphInvalidationResult result;
+
+    if (events.empty())
+      return result;
+
+    std::unordered_map<std::string, std::string> pathToNode;
+    pathToNode.reserve(nodes_.size());
+
+    for (const auto &kv : nodes_)
+    {
+      const BuildNode &node = kv.second;
+
+      if (node.path.empty())
+        continue;
+
+      pathToNode[node.path.lexically_normal().generic_string()] = node.id;
+    }
+
+    std::set<std::string> changedNodeIds;
+
+    auto invalidate_one_path =
+        [&](const fs::path &path, watch::EventKind eventKind)
+    {
+      const fs::path normalizedPath = path.lexically_normal();
+      const std::string key = normalizedPath.generic_string();
+      const auto it = pathToNode.find(key);
+
+      if (it == pathToNode.end())
+      {
+        const BuildNodeKind kind = kind_for_project_input_path(normalizedPath);
+
+        if (kind == BuildNodeKind::Unknown)
+          return;
+
+        result.relevant = true;
+        result.structuralChange = true;
+        result.unknownPaths.push_back(normalizedPath);
+        return;
+      }
+
+      BuildNode *node = find_node(it->second);
+      if (!node)
+        return;
+
+      result.relevant = true;
+
+      if (node->kind == BuildNodeKind::Config)
+      {
+        result.structuralChange = true;
+        result.unknownPaths.push_back(normalizedPath);
+      }
+
+      if (node->kind == BuildNodeKind::Source &&
+          eventKind == watch::EventKind::Removed)
+      {
+        result.structuralChange = true;
+        result.unknownPaths.push_back(normalizedPath);
+      }
+
+      if (eventKind == watch::EventKind::Removed)
+      {
+        node->mark_missing();
+      }
+      else
+      {
+        BuildNode updated = make_file_build_node(node->kind, node->path);
+        updated.hash = hash_file_content(node->path);
+        node->size = updated.size;
+        node->mtime = updated.mtime;
+        node->hash = updated.hash;
+        node->mark_dirty();
+      }
+
+      changedNodeIds.insert(node->id);
+    };
+
+    for (const watch::Event &event : events)
+    {
+      if (event.kind == watch::EventKind::Overflow)
+      {
+        result.relevant = true;
+        result.structuralChange = true;
+        result.overflow = true;
+        continue;
+      }
+
+      if (event.directory)
+      {
+        if (event.kind == watch::EventKind::Added ||
+            event.kind == watch::EventKind::Removed ||
+            event.kind == watch::EventKind::Renamed)
+        {
+          result.relevant = true;
+          result.structuralChange = true;
+          result.unknownPaths.push_back(event.path.lexically_normal());
+        }
+
+        continue;
+      }
+
+      if (event.kind == watch::EventKind::Renamed && !event.oldPath.empty())
+        invalidate_one_path(event.oldPath, watch::EventKind::Removed);
+
+      invalidate_one_path(event.path, event.kind);
+    }
+
+    result.changedNodes = changedNodeIds.size();
+
+    propagate_dirty();
+
+    std::set<std::string> dirtyTaskIds;
+
+    for (auto &kv : tasks_)
+    {
+      BuildTask &task = kv.second;
+
+      if (!task_is_dirty(task))
+        continue;
+
+      task.state = BuildTaskState::Pending;
+      dirtyTaskIds.insert(task.id);
+    }
+
+    result.dirtyTaskIds.assign(dirtyTaskIds.begin(), dirtyTaskIds.end());
+    result.affectedTasks = result.dirtyTaskIds.size();
+
+    std::sort(result.unknownPaths.begin(), result.unknownPaths.end());
+    result.unknownPaths.erase(
+        std::unique(result.unknownPaths.begin(), result.unknownPaths.end()),
+        result.unknownPaths.end());
+
+    return result;
   }
 
   std::vector<BuildTask> BuildGraph::compile_tasks() const

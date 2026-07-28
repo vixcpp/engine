@@ -199,15 +199,18 @@ namespace
           assert(request.target == "app" || request.target == "missing" ||
                  request.target == "generated" || request.target == "ambiguous");
           assert(!request.buildDir.empty());
-          assert(request.command.size() == 2);
+          assert(request.command.size() == 4);
           assert(request.command[0] == "ninja");
+          assert(request.command[1] == "-C");
+          assert(request.command[2] == request.buildDir.string());
+          assert(request.command[3] == request.target);
 
           vix::engine::BuildGraphExecutorNinjaResult result;
           result.started = true;
           result.exitCode = 0;
           result.producedOutput = true;
           result.output = "ninja ok\n";
-          result.displayCommand = "ninja " + request.target;
+          result.displayCommand = "ninja -C " + request.buildDir.string() + " " + request.target;
           return result;
         };
     dependencies.onEvent =

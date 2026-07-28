@@ -31,5 +31,6 @@
 #include <vix/engine/Preset.hpp>
 #include <vix/engine/Process.hpp>
 #include <vix/engine/Toolchain.hpp>
+#include <vix/engine/Watch.hpp>
 
 #endif

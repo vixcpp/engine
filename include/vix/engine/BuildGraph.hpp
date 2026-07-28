@@ -29,6 +29,7 @@
 #include <vix/engine/CompileCommands.hpp>
 #include <vix/engine/DependencyFile.hpp>
 #include <vix/engine/BuildNinja.hpp>
+#include <vix/engine/Watch.hpp>
 
 namespace vix::engine
 {
@@ -71,6 +72,19 @@ namespace vix::engine
     std::size_t headers{0}; ///< Number of header files found
     std::size_t configs{0}; ///< Number of config files found
     std::size_t tasks{0};   ///< Number of generated tasks
+  };
+
+  struct BuildGraphInvalidationResult
+  {
+    bool relevant{false};
+    bool structuralChange{false};
+    bool overflow{false};
+
+    std::size_t changedNodes{0};
+    std::size_t affectedTasks{0};
+
+    std::vector<fs::path> unknownPaths;
+    std::vector<std::string> dirtyTaskIds;
   };
 
   /**
@@ -269,6 +283,9 @@ namespace vix::engine
      * If a dependency is dirty or missing, dependent nodes become dirty.
      */
     void propagate_dirty();
+
+    BuildGraphInvalidationResult invalidate_paths(
+        const std::vector<watch::Event> &events);
 
     /**
      * @brief Return all compile tasks.

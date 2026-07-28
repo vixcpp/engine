@@ -451,6 +451,8 @@ namespace vix::engine
       request.target = target;
       request.command = {
           "ninja",
+          "-C",
+          buildDir.string(),
           target};
       return request;
     }
