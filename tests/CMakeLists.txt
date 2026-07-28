@@ -33,3 +33,9 @@ add_executable(vix_engine_process_tests
 )
 target_link_libraries(vix_engine_process_tests PRIVATE vix::engine)
 add_test(NAME vix_engine_process_tests COMMAND vix_engine_process_tests)
+
+add_executable(vix_engine_object_cache_tests
+  ObjectCacheTests.cpp
+)
+target_link_libraries(vix_engine_object_cache_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_object_cache_tests COMMAND vix_engine_object_cache_tests)
