@@ -45,3 +45,9 @@ add_executable(vix_engine_graph_executor_tests
 )
 target_link_libraries(vix_engine_graph_executor_tests PRIVATE vix::engine)
 add_test(NAME vix_engine_graph_executor_tests COMMAND vix_engine_graph_executor_tests)
+
+add_executable(vix_engine_artifact_cache_tests
+  ArtifactCacheTests.cpp
+)
+target_link_libraries(vix_engine_artifact_cache_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_artifact_cache_tests COMMAND vix_engine_artifact_cache_tests)
