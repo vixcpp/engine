@@ -1174,6 +1174,42 @@ namespace vix::engine
       if (!node)
         return;
 
+      bool changed = false;
+
+      if (eventKind == watch::EventKind::Removed)
+      {
+        changed = !node->missing() ||
+                  node->size != 0 ||
+                  node->mtime != 0 ||
+                  !node->hash.empty();
+        if (!changed)
+          return;
+
+        node->mark_missing();
+        node->size = 0;
+        node->mtime = 0;
+        node->hash.clear();
+      }
+      else
+      {
+        BuildNode updated = make_file_build_node(node->kind, node->path);
+        updated.hash = hash_file_content(node->path);
+
+        changed =
+            node->missing() ||
+            node->size != updated.size ||
+            node->mtime != updated.mtime ||
+            node->hash != updated.hash;
+
+        if (!changed)
+          return;
+
+        node->size = updated.size;
+        node->mtime = updated.mtime;
+        node->hash = updated.hash;
+        node->mark_dirty();
+      }
+
       result.relevant = true;
 
       if (node->kind == BuildNodeKind::Config)
@@ -1187,20 +1223,6 @@ namespace vix::engine
       {
         result.structuralChange = true;
         result.unknownPaths.push_back(normalizedPath);
-      }
-
-      if (eventKind == watch::EventKind::Removed)
-      {
-        node->mark_missing();
-      }
-      else
-      {
-        BuildNode updated = make_file_build_node(node->kind, node->path);
-        updated.hash = hash_file_content(node->path);
-        node->size = updated.size;
-        node->mtime = updated.mtime;
-        node->hash = updated.hash;
-        node->mark_dirty();
       }
 
       changedNodeIds.insert(node->id);
@@ -1237,6 +1259,14 @@ namespace vix::engine
     }
 
     result.changedNodes = changedNodeIds.size();
+
+    if (!result.structuralChange &&
+        !result.overflow &&
+        result.changedNodes == 0)
+    {
+      result.relevant = false;
+      return result;
+    }
 
     propagate_dirty();
 

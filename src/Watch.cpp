@@ -583,7 +583,12 @@ namespace vix::engine::watch
           return;
         }
 
-        if (ev.mask & (IN_CLOSE_WRITE | IN_MODIFY | IN_ATTRIB))
+        /*
+         * IN_MODIFY and IN_ATTRIB are intermediate/noisy signals for many
+         * editors. IN_CLOSE_WRITE represents the completed file state and is
+         * the event watch-mode rebuild classification should consume.
+         */
+        if (ev.mask & IN_CLOSE_WRITE)
         {
           events.push_back({EventKind::Modified, path, {}, isDir});
           return;

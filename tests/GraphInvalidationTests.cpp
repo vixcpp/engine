@@ -188,6 +188,52 @@ namespace
     assert(!result.structuralChange);
     assert(result.affectedTasks == 0);
   }
+
+  static void unchanged_known_source_event_is_ignored()
+  {
+    TempDir tmp;
+    engine::BuildGraph graph = make_graph(tmp.path);
+
+    const fs::path source = tmp.path / "src" / "main.cpp";
+
+    watch::Event event;
+    event.kind = watch::EventKind::Modified;
+    event.path = source;
+
+    const auto first = graph.invalidate_paths({event});
+    assert(first.relevant);
+    assert(first.changedNodes == 1);
+
+    const std::string sourceId =
+        engine::make_build_node_id(engine::BuildNodeKind::Source, source);
+    const std::string headerId =
+        engine::make_build_node_id(
+            engine::BuildNodeKind::Header,
+            tmp.path / "include" / "app.hpp");
+    const std::string objectId =
+        engine::make_build_node_id(
+            engine::BuildNodeKind::Object,
+            tmp.path / "build-ninja" / ".vix" / "obj" / "main.o");
+
+    if (engine::BuildNode *node = graph.find_node(sourceId))
+      node->mark_clean();
+    if (engine::BuildNode *node = graph.find_node(headerId))
+      node->mark_clean();
+    if (engine::BuildNode *node = graph.find_node(objectId))
+      node->mark_clean();
+    if (engine::BuildTask *task = graph.find_task("compile:main"))
+      task->state = engine::BuildTaskState::Done;
+
+    const auto second = graph.invalidate_paths({event});
+    assert(!second.relevant);
+    assert(!second.structuralChange);
+    assert(second.changedNodes == 0);
+    assert(second.affectedTasks == 0);
+
+    const engine::BuildTask *task = graph.find_task("compile:main");
+    assert(task);
+    assert(task->state == engine::BuildTaskState::Done);
+  }
 }
 
 int main()
@@ -197,6 +243,7 @@ int main()
   removed_source_is_structural_and_dirty();
   unknown_source_is_structural();
   unknown_unrelated_file_is_ignored();
+  unchanged_known_source_event_is_ignored();
 
   std::cout << "GraphInvalidationTests passed\n";
   return 0;
