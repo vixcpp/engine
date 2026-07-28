@@ -51,3 +51,9 @@ add_executable(vix_engine_artifact_cache_tests
 )
 target_link_libraries(vix_engine_artifact_cache_tests PRIVATE vix::engine)
 add_test(NAME vix_engine_artifact_cache_tests COMMAND vix_engine_artifact_cache_tests)
+
+add_executable(vix_engine_execution_plan_tests
+  ExecutionPlanTests.cpp
+)
+target_link_libraries(vix_engine_execution_plan_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_execution_plan_tests COMMAND vix_engine_execution_plan_tests)
