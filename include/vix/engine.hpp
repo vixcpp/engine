@@ -14,6 +14,8 @@
 #include <vix/engine/BuildNode.hpp>
 #include <vix/engine/BuildScheduler.hpp>
 #include <vix/engine/BuildTask.hpp>
+#include <vix/engine/BuildTools.hpp>
+#include <vix/engine/CMakeConfiguration.hpp>
 #include <vix/engine/CompileCommands.hpp>
 #include <vix/engine/DependencyFile.hpp>
 #include <vix/engine/Diagnostic.hpp>
@@ -25,5 +27,6 @@
 #include <vix/engine/ObjectCache.hpp>
 #include <vix/engine/Preset.hpp>
 #include <vix/engine/Process.hpp>
+#include <vix/engine/Toolchain.hpp>
 
 #endif

@@ -10,31 +10,11 @@
 #include <string>
 #include <vector>
 
+#include <vix/engine/BuildTools.hpp>
+
 namespace vix::engine
 {
   namespace fs = std::filesystem;
-
-  /**
-   * @brief Linker selection requested by the caller.
-   */
-  enum class LinkerMode
-  {
-    Auto,
-    Default,
-    Mold,
-    Lld
-  };
-
-  /**
-   * @brief Compiler launcher selection requested by the caller.
-   */
-  enum class LauncherMode
-  {
-    Auto,
-    None,
-    Sccache,
-    Ccache
-  };
 
   /**
    * @brief Minimal execution options shared by build-like workflows.

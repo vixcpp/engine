@@ -57,3 +57,21 @@ add_executable(vix_engine_execution_plan_tests
 )
 target_link_libraries(vix_engine_execution_plan_tests PRIVATE vix::engine)
 add_test(NAME vix_engine_execution_plan_tests COMMAND vix_engine_execution_plan_tests)
+
+add_executable(vix_engine_build_tools_tests
+  BuildToolsTests.cpp
+)
+target_link_libraries(vix_engine_build_tools_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_build_tools_tests COMMAND vix_engine_build_tools_tests)
+
+add_executable(vix_engine_toolchain_tests
+  ToolchainTests.cpp
+)
+target_link_libraries(vix_engine_toolchain_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_toolchain_tests COMMAND vix_engine_toolchain_tests)
+
+add_executable(vix_engine_cmake_configuration_tests
+  CMakeConfigurationTests.cpp
+)
+target_link_libraries(vix_engine_cmake_configuration_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_cmake_configuration_tests COMMAND vix_engine_cmake_configuration_tests)
