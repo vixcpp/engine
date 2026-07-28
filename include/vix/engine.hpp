@@ -6,6 +6,8 @@
 #ifndef VIX_ENGINE_HPP
 #define VIX_ENGINE_HPP
 
+#include <vix/engine/BuildGraph.hpp>
+#include <vix/engine/BuildNinja.hpp>
 #include <vix/engine/BuildNode.hpp>
 #include <vix/engine/BuildTask.hpp>
 #include <vix/engine/CompileCommands.hpp>
