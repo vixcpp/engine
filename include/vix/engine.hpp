@@ -17,11 +17,14 @@
 #include <vix/engine/BuildTools.hpp>
 #include <vix/engine/CMakeConfiguration.hpp>
 #include <vix/engine/CompileCommands.hpp>
+#include <vix/engine/ConfigurationSignature.hpp>
+#include <vix/engine/ConfigureDecision.hpp>
 #include <vix/engine/DependencyFile.hpp>
 #include <vix/engine/Diagnostic.hpp>
 #include <vix/engine/Engine.hpp>
 #include <vix/engine/Event.hpp>
 #include <vix/engine/ExecutionPlan.hpp>
+#include <vix/engine/ExecutionPlanning.hpp>
 #include <vix/engine/ExecutionResult.hpp>
 #include <vix/engine/Options.hpp>
 #include <vix/engine/ObjectCache.hpp>

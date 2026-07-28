@@ -75,3 +75,27 @@ add_executable(vix_engine_cmake_configuration_tests
 )
 target_link_libraries(vix_engine_cmake_configuration_tests PRIVATE vix::engine)
 add_test(NAME vix_engine_cmake_configuration_tests COMMAND vix_engine_cmake_configuration_tests)
+
+add_executable(vix_engine_execution_planning_tests
+  ExecutionPlanningTests.cpp
+)
+target_link_libraries(vix_engine_execution_planning_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_execution_planning_tests COMMAND vix_engine_execution_planning_tests)
+
+add_executable(vix_engine_configuration_signature_tests
+  ConfigurationSignatureTests.cpp
+)
+target_link_libraries(vix_engine_configuration_signature_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_configuration_signature_tests COMMAND vix_engine_configuration_signature_tests)
+
+add_executable(vix_engine_configuration_persistence_tests
+  ConfigurationPersistenceTests.cpp
+)
+target_link_libraries(vix_engine_configuration_persistence_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_configuration_persistence_tests COMMAND vix_engine_configuration_persistence_tests)
+
+add_executable(vix_engine_configure_decision_tests
+  ConfigureDecisionTests.cpp
+)
+target_link_libraries(vix_engine_configure_decision_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_configure_decision_tests COMMAND vix_engine_configure_decision_tests)
