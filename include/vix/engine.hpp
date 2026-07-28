@@ -9,6 +9,7 @@
 #include <vix/engine/BuildGraph.hpp>
 #include <vix/engine/BuildNinja.hpp>
 #include <vix/engine/BuildNode.hpp>
+#include <vix/engine/BuildScheduler.hpp>
 #include <vix/engine/BuildTask.hpp>
 #include <vix/engine/CompileCommands.hpp>
 #include <vix/engine/DependencyFile.hpp>

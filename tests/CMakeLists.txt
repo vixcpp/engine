@@ -21,3 +21,9 @@ add_executable(vix_engine_graph_tests
 )
 target_link_libraries(vix_engine_graph_tests PRIVATE vix::engine)
 add_test(NAME vix_engine_graph_tests COMMAND vix_engine_graph_tests)
+
+add_executable(vix_engine_scheduler_tests
+  SchedulerTests.cpp
+)
+target_link_libraries(vix_engine_scheduler_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_scheduler_tests COMMAND vix_engine_scheduler_tests)
