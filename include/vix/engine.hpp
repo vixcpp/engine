@@ -19,5 +19,6 @@
 #include <vix/engine/ExecutionPlan.hpp>
 #include <vix/engine/ExecutionResult.hpp>
 #include <vix/engine/Options.hpp>
+#include <vix/engine/Process.hpp>
 
 #endif

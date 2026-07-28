@@ -27,3 +27,9 @@ add_executable(vix_engine_scheduler_tests
 )
 target_link_libraries(vix_engine_scheduler_tests PRIVATE vix::engine)
 add_test(NAME vix_engine_scheduler_tests COMMAND vix_engine_scheduler_tests)
+
+add_executable(vix_engine_process_tests
+  ProcessTests.cpp
+)
+target_link_libraries(vix_engine_process_tests PRIVATE vix::engine)
+add_test(NAME vix_engine_process_tests COMMAND vix_engine_process_tests)
