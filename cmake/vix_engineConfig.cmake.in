@@ -1,0 +1,9 @@
+@PACKAGE_INIT@
+
+include(CMakeFindDependencyMacro)
+
+if (NOT TARGET vix::json)
+  find_dependency(vix_json CONFIG)
+endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/vix_engineTargets.cmake")
