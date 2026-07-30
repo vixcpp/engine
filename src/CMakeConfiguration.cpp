@@ -143,7 +143,8 @@ namespace vix::engine
 
     (void)options.globalPackagesFile;
 
-    if (!options.sdkConfigDir.empty())
+    if (options.dependencyEnvironmentMode == DependencyEnvironmentMode::ManagedSdk &&
+        !options.sdkConfigDir.empty())
     {
       vars.emplace_back("Vix_DIR", options.sdkConfigDir.string());
       vars.emplace_back("vix_DIR", options.sdkConfigDir.string());

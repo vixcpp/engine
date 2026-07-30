@@ -86,7 +86,6 @@ int main()
     assert(plan.sigFile.empty());
     assert(plan.toolchainFile.empty());
     assert(plan.sdkConfigDir.empty());
-    assert(plan.sdkResolutionError.empty());
     assert(plan.cmakeVars.empty());
     assert(plan.signature.empty());
     assert(!plan.launcher.has_value());

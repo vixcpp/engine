@@ -22,6 +22,8 @@
 #include <utility>
 #include <vector>
 
+#include <vix/engine/ExecutionPlan.hpp>
+
 namespace vix::engine
 {
   using CMakeVariable = std::pair<std::string, std::string>;
@@ -38,6 +40,8 @@ namespace vix::engine
 
     std::filesystem::path toolchainFile;
     std::filesystem::path globalPackagesFile;
+    DependencyEnvironmentMode dependencyEnvironmentMode{
+        DependencyEnvironmentMode::Native};
     std::filesystem::path sdkConfigDir;
 
     std::optional<std::string> launcher;

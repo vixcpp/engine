@@ -28,6 +28,12 @@ namespace vix::engine
 {
   namespace fs = std::filesystem;
 
+  enum class DependencyEnvironmentMode
+  {
+    Native,
+    ManagedSdk
+  };
+
   /**
    * @brief Fully resolved execution plan for a build-like workflow.
    *
@@ -79,8 +85,10 @@ namespace vix::engine
     fs::path sigFile;       ///< Configuration signature file path
     fs::path toolchainFile; ///< Generated toolchain file path
 
-    fs::path sdkConfigDir;        ///< Resolved SDK CMake package directory
-    std::string sdkResolutionError; ///< Fatal SDK resolution error
+    DependencyEnvironmentMode dependencyEnvironmentMode{
+        DependencyEnvironmentMode::Native};
+
+    fs::path sdkConfigDir;        ///< Resolved managed SDK CMake package directory
 
     /**
      * @brief Resolved CMake cache variables passed during configure.

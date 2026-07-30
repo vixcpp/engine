@@ -2,6 +2,7 @@
 
 #include "EnvGuard.hpp"
 
+#include <algorithm>
 #include <cassert>
 #include <filesystem>
 #include <string>
@@ -118,12 +119,24 @@ int main()
     expected.emplace_back("VIX_ENABLE_WARNINGS", "ON");
     expected.emplace_back("VIX_LINK_STATIC", "ON");
     expected.emplace_back("VIX_TARGET_TRIPLE", "aarch64-linux-gnu");
-    expected.emplace_back("Vix_DIR", "/tmp/sdk/lib/cmake/Vix");
-    expected.emplace_back("vix_DIR", "/tmp/sdk/lib/cmake/Vix");
 
     assert(make_cmake_variables(options) == expected);
     for (const auto &var : make_cmake_variables(options))
       assert(var.first != "globalPackagesFile");
+  }
+
+  {
+    CMakeConfigurationOptions options;
+    options.buildType = "Debug";
+    options.dependencyEnvironmentMode = DependencyEnvironmentMode::ManagedSdk;
+    options.sdkConfigDir = "/tmp/sdk/lib/cmake/Vix";
+
+    std::vector<CMakeVariable> expected = base_debug();
+    expected.emplace_back("Vix_DIR", "/tmp/sdk/lib/cmake/Vix");
+    expected.emplace_back("vix_DIR", "/tmp/sdk/lib/cmake/Vix");
+    std::sort(expected.begin(), expected.end());
+
+    assert(make_cmake_variables(options) == expected);
   }
 
   {
