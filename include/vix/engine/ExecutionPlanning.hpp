@@ -11,6 +11,7 @@
 
 #include <vix/engine/ExecutionPlan.hpp>
 #include <vix/engine/Preset.hpp>
+#include <vix/engine/SanitizerMode.hpp>
 
 namespace vix::engine
 {
@@ -24,6 +25,11 @@ namespace vix::engine
 
     Preset preset;
     std::string targetTriple;
+
+    /**
+     * @brief Sanitizer variant used to isolate build artifacts.
+     */
+    SanitizerMode sanitizerMode{SanitizerMode::None};
   };
 
   struct ExecutionPlanLayoutResult
