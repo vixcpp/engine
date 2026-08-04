@@ -34,24 +34,27 @@ endif()
 # ---------------------------------------------------------------------------
 
 set(VIX_ENGINE_JSON_TARGET "")
-set(VIX_ENGINE_JSON_PACKAGE "")
+set(VIX_ENGINE_JSON_PROVIDER "")
 set(VIX_ENGINE_FIND_JSON_DEPENDENCY "")
+set(VIX_ENGINE_EXPORT_FETCHED_JSON OFF)
 
 if (VIX_ENGINE_UMBRELLA_BUILD)
   if (NOT TARGET vix::json)
     message(
       FATAL_ERROR
-      "[engine] Umbrella build: vix::json must be provided before engine."
+      "[engine] Umbrella build requires vix::json to exist before engine."
     )
   endif()
 
   set(VIX_ENGINE_JSON_TARGET vix::json)
+  set(VIX_ENGINE_JSON_PROVIDER umbrella)
 else()
-  # Prefer the Vix JSON module when it is available as a sibling repository.
+  # Prefer the sibling Vix JSON module.
   if (NOT TARGET vix::json)
     if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/../json/CMakeLists.txt")
       set(VIX_JSON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
       set(VIX_JSON_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+      set(VIX_JSON_BUILD_BENCHMARKS OFF CACHE BOOL "" FORCE)
 
       add_subdirectory(
         "${CMAKE_CURRENT_LIST_DIR}/../json"
@@ -64,13 +67,13 @@ else()
 
   if (TARGET vix::json)
     set(VIX_ENGINE_JSON_TARGET vix::json)
-    set(VIX_ENGINE_JSON_PACKAGE vix_json)
+    set(VIX_ENGINE_JSON_PROVIDER vix_json)
     set(
       VIX_ENGINE_FIND_JSON_DEPENDENCY
       "find_dependency(vix_json CONFIG)"
     )
   else()
-    # Fall back to an already installed nlohmann_json package.
+    # Try an installed nlohmann_json package.
     find_package(nlohmann_json CONFIG QUIET)
 
     if (TARGET nlohmann_json::nlohmann_json)
@@ -78,12 +81,16 @@ else()
         VIX_ENGINE_JSON_TARGET
         nlohmann_json::nlohmann_json
       )
-      set(VIX_ENGINE_JSON_PACKAGE nlohmann_json)
+
+      set(VIX_ENGINE_JSON_PROVIDER nlohmann_json)
       set(
         VIX_ENGINE_FIND_JSON_DEPENDENCY
         "find_dependency(nlohmann_json CONFIG)"
       )
     elseif (VIX_ENGINE_FETCH_JSON)
+      # Fetch only the source tree. Do not call
+      # FetchContent_MakeAvailable(), because that creates a regular
+      # nlohmann_json target that cannot be referenced by our export set.
       include(FetchContent)
 
       FetchContent_Declare(
@@ -93,25 +100,45 @@ else()
         GIT_SHALLOW TRUE
       )
 
-      FetchContent_MakeAvailable(nlohmann_json_fallback)
+      FetchContent_GetProperties(nlohmann_json_fallback)
 
-      if (NOT TARGET nlohmann_json::nlohmann_json)
+      if (NOT nlohmann_json_fallback_POPULATED)
+        FetchContent_Populate(nlohmann_json_fallback)
+      endif()
+
+      if (
+        NOT EXISTS
+        "${nlohmann_json_fallback_SOURCE_DIR}/include/nlohmann/json.hpp"
+      )
         message(
           FATAL_ERROR
-          "[engine] nlohmann_json was fetched, but "
-          "nlohmann_json::nlohmann_json is unavailable."
+          "[engine] Fetched nlohmann_json headers are unavailable."
         )
       endif()
 
-      set(
-        VIX_ENGINE_JSON_TARGET
-        nlohmann_json::nlohmann_json
+      # This target belongs to the engine package and can therefore be
+      # exported together with vix_engine.
+      add_library(vix_engine_json INTERFACE)
+
+      target_include_directories(
+        vix_engine_json
+        INTERFACE
+          $<BUILD_INTERFACE:${nlohmann_json_fallback_SOURCE_DIR}/include>
+          $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
       )
-      set(VIX_ENGINE_JSON_PACKAGE nlohmann_json)
-      set(
-        VIX_ENGINE_FIND_JSON_DEPENDENCY
-        "find_dependency(nlohmann_json CONFIG)"
+
+      set_target_properties(
+        vix_engine_json
+        PROPERTIES
+          EXPORT_NAME engine_json
       )
+
+      add_library(vix::engine_json ALIAS vix_engine_json)
+
+      set(VIX_ENGINE_JSON_TARGET vix_engine_json)
+      set(VIX_ENGINE_JSON_PROVIDER fetched)
+      set(VIX_ENGINE_EXPORT_FETCHED_JSON ON)
+      set(VIX_ENGINE_FIND_JSON_DEPENDENCY "")
     else()
       message(
         FATAL_ERROR
@@ -124,12 +151,12 @@ endif()
 if (NOT VIX_ENGINE_JSON_TARGET)
   message(
     FATAL_ERROR
-    "[engine] Internal error: no JSON dependency target was selected."
+    "[engine] Internal error: no JSON target was selected."
   )
 endif()
 
 # ---------------------------------------------------------------------------
-# Library
+# Engine library
 # ---------------------------------------------------------------------------
 
 file(
@@ -168,25 +195,30 @@ if (VIX_ENGINE_UMBRELLA_BUILD)
     PUBLIC
       "${VIX_ENGINE_JSON_TARGET}"
   )
-elseif (VIX_ENGINE_JSON_PACKAGE STREQUAL "vix_json")
+elseif (VIX_ENGINE_JSON_PROVIDER STREQUAL "vix_json")
   target_link_libraries(
     vix_engine
     PUBLIC
       "$<BUILD_INTERFACE:${VIX_ENGINE_JSON_TARGET}>"
       "$<INSTALL_INTERFACE:vix::json>"
   )
-elseif (VIX_ENGINE_JSON_PACKAGE STREQUAL "nlohmann_json")
+elseif (VIX_ENGINE_JSON_PROVIDER STREQUAL "nlohmann_json")
   target_link_libraries(
     vix_engine
     PUBLIC
       "$<BUILD_INTERFACE:${VIX_ENGINE_JSON_TARGET}>"
       "$<INSTALL_INTERFACE:nlohmann_json::nlohmann_json>"
   )
+elseif (VIX_ENGINE_JSON_PROVIDER STREQUAL "fetched")
+  target_link_libraries(
+    vix_engine
+    PUBLIC
+      vix_engine_json
+  )
 else()
   message(
     FATAL_ERROR
-    "[engine] Internal error: unsupported JSON package "
-    "'${VIX_ENGINE_JSON_PACKAGE}'."
+    "[engine] Unsupported JSON provider: ${VIX_ENGINE_JSON_PROVIDER}"
   )
 endif()
 
@@ -203,14 +235,27 @@ set_target_properties(
 # Installation
 # ---------------------------------------------------------------------------
 
-install(
-  TARGETS vix_engine
-  EXPORT ${VIX_ENGINE_EXPORT_SET}
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-  INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+if (VIX_ENGINE_EXPORT_FETCHED_JSON)
+  install(
+    TARGETS
+      vix_engine
+      vix_engine_json
+    EXPORT ${VIX_ENGINE_EXPORT_SET}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  )
+else()
+  install(
+    TARGETS vix_engine
+    EXPORT ${VIX_ENGINE_EXPORT_SET}
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  )
+endif()
 
 if (NOT VIX_ENGINE_UMBRELLA_BUILD)
   install(
@@ -220,6 +265,20 @@ if (NOT VIX_ENGINE_UMBRELLA_BUILD)
       PATTERN "*.hpp"
       PATTERN "*.h"
   )
+
+  # When nlohmann_json was fetched, its headers become part of the
+  # standalone engine package.
+  if (VIX_ENGINE_EXPORT_FETCHED_JSON)
+    install(
+      DIRECTORY
+        "${nlohmann_json_fallback_SOURCE_DIR}/include/nlohmann"
+      DESTINATION
+        "${CMAKE_INSTALL_INCLUDEDIR}"
+      FILES_MATCHING
+        PATTERN "*.hpp"
+        PATTERN "*.h"
+    )
+  endif()
 
   configure_package_config_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/vix_engineConfig.cmake.in"
@@ -270,19 +329,6 @@ if (VIX_ENGINE_BUILD_TESTS)
   endif()
 endif()
 
-message(
-  STATUS
-  "vix::engine configured (${PROJECT_VERSION})"
-)
-
-message(
-  STATUS
-  "[engine] JSON target: ${VIX_ENGINE_JSON_TARGET}"
-)
-
-if (NOT VIX_ENGINE_UMBRELLA_BUILD)
-  message(
-    STATUS
-    "[engine] Installed JSON dependency: ${VIX_ENGINE_JSON_PACKAGE}"
-  )
-endif()
+message(STATUS "vix::engine configured (${PROJECT_VERSION})")
+message(STATUS "[engine] JSON target: ${VIX_ENGINE_JSON_TARGET}")
+message(STATUS "[engine] JSON provider: ${VIX_ENGINE_JSON_PROVIDER}")
