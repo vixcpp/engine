@@ -18,10 +18,15 @@ else()
   set(VIX_ENGINE_EXPORT_SET vix_engineTargets)
 endif()
 
+set(VIX_ENGINE_JSON_TARGET "")
+set(VIX_ENGINE_JSON_PACKAGE "")
+
 if (DEFINED VIX_UMBRELLA_BUILD AND VIX_UMBRELLA_BUILD)
   if (NOT TARGET vix::json)
     message(FATAL_ERROR "[engine] Umbrella build: vix::json must be provided before engine.")
   endif()
+
+  set(VIX_ENGINE_JSON_TARGET vix::json)
 else()
   if (NOT TARGET vix::json)
     if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/../json/CMakeLists.txt")
@@ -33,24 +38,28 @@ else()
     endif()
   endif()
 
-  if (NOT TARGET vix::json)
+  if (TARGET vix::json)
+    set(VIX_ENGINE_JSON_TARGET vix::json)
+    set(VIX_ENGINE_JSON_PACKAGE vix_json)
+  else()
     find_package(nlohmann_json QUIET CONFIG)
-    if (nlohmann_json_FOUND AND TARGET nlohmann_json::nlohmann_json)
-      add_library(vix_engine_json INTERFACE)
-      add_library(vix::json ALIAS vix_engine_json)
-      target_link_libraries(vix_engine_json INTERFACE nlohmann_json::nlohmann_json)
-    elseif (VIX_ENGINE_FETCH_JSON)
+
+    if (NOT TARGET nlohmann_json::nlohmann_json AND VIX_ENGINE_FETCH_JSON)
       include(FetchContent)
+
       FetchContent_Declare(
         nlohmann_json_fallback
         GIT_REPOSITORY https://github.com/nlohmann/json.git
         GIT_TAG v3.11.3
         GIT_SHALLOW TRUE
       )
+
       FetchContent_MakeAvailable(nlohmann_json_fallback)
-      add_library(vix_engine_json INTERFACE)
-      add_library(vix::json ALIAS vix_engine_json)
-      target_link_libraries(vix_engine_json INTERFACE nlohmann_json::nlohmann_json)
+    endif()
+
+    if (TARGET nlohmann_json::nlohmann_json)
+      set(VIX_ENGINE_JSON_TARGET nlohmann_json::nlohmann_json)
+      set(VIX_ENGINE_JSON_PACKAGE nlohmann_json)
     else()
       message(FATAL_ERROR "vix::json or nlohmann_json is required by vix::engine.")
     endif()
@@ -74,7 +83,7 @@ target_include_directories(vix_engine
 
 target_link_libraries(vix_engine
   PUBLIC
-    vix::json
+    ${VIX_ENGINE_JSON_TARGET}
 )
 
 set_target_properties(vix_engine PROPERTIES
@@ -130,3 +139,4 @@ if (VIX_ENGINE_BUILD_TESTS)
 endif()
 
 message(STATUS "vix::engine configured (${PROJECT_VERSION})")
+

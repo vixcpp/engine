@@ -1,0 +1,786 @@
+name: Engine Strict CI
+
+on:
+  push:
+    branches:
+      - main
+      - master
+      - dev
+      - release/**
+    paths:
+      - ".github/workflows/engine-strict-ci.yml"
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "include/**"
+      - "src/**"
+      - "tests/**"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "vix.json"
+
+  pull_request:
+    branches:
+      - main
+      - master
+      - dev
+      - release/**
+    paths:
+      - ".github/workflows/engine-strict-ci.yml"
+      - "CMakeLists.txt"
+      - "cmake/**"
+      - "include/**"
+      - "src/**"
+      - "tests/**"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "vix.json"
+
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: engine-strict-ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DEPS: >
+    build-essential
+    cmake
+    ninja-build
+    clang
+    llvm
+    lld
+    g++
+    cppcheck
+    clang-tidy
+    valgrind
+    pkg-config
+    git
+    ca-certificates
+    python3
+    nlohmann-json3-dev
+  BUILD_JOBS: 2
+  VIX_GIT_BRANCH: dev
+
+jobs:
+  sanitized-tests:
+    name: Sanitized Tests (${{ matrix.compiler }}, json=${{ matrix.json_mode }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: clang
+            json_mode: sibling
+          - compiler: gcc
+            json_mode: sibling
+          - compiler: clang
+            json_mode: system
+          - compiler: gcc
+            json_mode: system
+
+    env:
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:strict_string_checks=1:check_initialization_order=1
+      UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+
+    steps:
+      - name: Checkout engine repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $DEPS
+          test -f /usr/include/nlohmann/json.hpp
+
+      - name: Prepare JSON dependency
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf ../json
+
+          if [ "${{ matrix.json_mode }}" = "sibling" ]; then
+            JSON_URL="https://github.com/vixcpp/json.git"
+
+            if git ls-remote --exit-code --heads "$JSON_URL" "$VIX_GIT_BRANCH" >/dev/null 2>&1; then
+              git clone --depth 1 --branch "$VIX_GIT_BRANCH" "$JSON_URL" ../json
+            else
+              git clone --depth 1 --branch main "$JSON_URL" ../json
+            fi
+
+            test -f ../json/CMakeLists.txt
+          else
+            test ! -e ../json
+            test -f /usr/include/nlohmann/json.hpp
+          fi
+
+      - name: Select compiler
+        run: |
+          set -euxo pipefail
+
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            echo "CC=clang" >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
+          else
+            echo "CC=gcc" >> "$GITHUB_ENV"
+            echo "CXX=g++" >> "$GITHUB_ENV"
+          fi
+
+      - name: Configure sanitized build
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          JSON_ARGS=(
+            -DVIX_ENGINE_FETCH_JSON=OFF
+            -DVIX_JSON_BUILD_TESTS=OFF
+            -DVIX_JSON_BUILD_EXAMPLES=OFF
+          )
+
+          if [ "${{ matrix.json_mode }}" = "system" ]; then
+            JSON_ARGS+=(
+              -DCMAKE_DISABLE_FIND_PACKAGE_vix_json=ON
+            )
+          fi
+
+          cmake -S . -B build-sanitize -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DCMAKE_CXX_FLAGS="-fsanitize=address,undefined -fno-omit-frame-pointer" \
+            -DCMAKE_EXE_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DCMAKE_SHARED_LINKER_FLAGS="-fsanitize=address,undefined" \
+            -DVIX_ENGINE_BUILD_TESTS=ON \
+            "${JSON_ARGS[@]}"
+
+      - name: Build sanitized targets
+        run: |
+          set -euxo pipefail
+          cmake --build build-sanitize -j"${BUILD_JOBS}"
+
+      - name: Verify test discovery
+        run: |
+          set -euxo pipefail
+
+          ctest --test-dir build-sanitize -N | tee /tmp/engine-tests.txt
+          TEST_COUNT="$(sed -n 's/^Total Tests: //p' /tmp/engine-tests.txt | tail -n 1)"
+
+          if [ -z "$TEST_COUNT" ] || [ "$TEST_COUNT" -eq 0 ]; then
+            echo "::error::No engine tests were discovered."
+            exit 1
+          fi
+
+      - name: Run sanitized tests
+        run: |
+          set -euxo pipefail
+          ctest --test-dir build-sanitize --output-on-failure --timeout 120
+
+  fetchcontent-fallback:
+    name: FetchContent JSON Fallback
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout engine repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install build dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            git \
+            ca-certificates
+
+      - name: Remove sibling JSON repository
+        run: |
+          set -euxo pipefail
+          rm -rf ../json
+          test ! -e ../json
+
+      - name: Configure forced FetchContent build
+        run: |
+          set -euxo pipefail
+
+          cmake -S . -B build-fetch -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVIX_ENGINE_BUILD_TESTS=ON \
+            -DVIX_ENGINE_FETCH_JSON=ON \
+            -DCMAKE_DISABLE_FIND_PACKAGE_vix_json=ON \
+            -DCMAKE_DISABLE_FIND_PACKAGE_nlohmann_json=ON
+
+      - name: Build FetchContent configuration
+        run: |
+          set -euxo pipefail
+          cmake --build build-fetch -j"${BUILD_JOBS}"
+
+      - name: Run FetchContent tests
+        run: |
+          set -euxo pipefail
+          ctest --test-dir build-fetch --output-on-failure --timeout 120
+
+  release-tests:
+    name: Release Build and Tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+
+    steps:
+      - name: Checkout engine repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $DEPS
+
+      - name: Fetch sibling JSON dependency
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf ../json
+          JSON_URL="https://github.com/vixcpp/json.git"
+
+          if git ls-remote --exit-code --heads "$JSON_URL" "$VIX_GIT_BRANCH" >/dev/null 2>&1; then
+            git clone --depth 1 --branch "$VIX_GIT_BRANCH" "$JSON_URL" ../json
+          else
+            git clone --depth 1 --branch main "$JSON_URL" ../json
+          fi
+
+          test -f ../json/CMakeLists.txt
+
+      - name: Configure release build
+        run: |
+          set -euxo pipefail
+
+          cmake -S . -B build-release -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVIX_ENGINE_BUILD_TESTS=ON \
+            -DVIX_ENGINE_FETCH_JSON=OFF \
+            -DVIX_JSON_BUILD_TESTS=OFF \
+            -DVIX_JSON_BUILD_EXAMPLES=OFF
+
+      - name: Build release targets
+        run: |
+          set -euxo pipefail
+          cmake --build build-release -j"${BUILD_JOBS}"
+
+      - name: Run release tests
+        run: |
+          set -euxo pipefail
+          ctest --test-dir build-release --output-on-failure --timeout 120
+
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Checkout engine repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $DEPS
+
+      - name: Fetch sibling JSON dependency
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf ../json
+          JSON_URL="https://github.com/vixcpp/json.git"
+
+          if git ls-remote --exit-code --heads "$JSON_URL" "$VIX_GIT_BRANCH" >/dev/null 2>&1; then
+            git clone --depth 1 --branch "$VIX_GIT_BRANCH" "$JSON_URL" ../json
+          else
+            git clone --depth 1 --branch main "$JSON_URL" ../json
+          fi
+
+          test -f ../json/CMakeLists.txt
+
+      - name: Configure analysis build
+        run: |
+          set -euxo pipefail
+
+          cmake -S . -B build-analyze -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVIX_ENGINE_BUILD_TESTS=ON \
+            -DVIX_ENGINE_FETCH_JSON=OFF \
+            -DVIX_JSON_BUILD_TESTS=OFF \
+            -DVIX_JSON_BUILD_EXAMPLES=OFF
+
+      - name: Build analysis targets
+        run: |
+          set -euxo pipefail
+          cmake --build build-analyze -j"${BUILD_JOBS}"
+
+      - name: Run clang-tidy on engine sources
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          mapfile -d '' FILES < <(find src -type f -name '*.cpp' -print0)
+
+          if [ "${#FILES[@]}" -eq 0 ]; then
+            echo "::error::No engine source files found for clang-tidy."
+            exit 1
+          fi
+
+          clang-tidy -p build-analyze "${FILES[@]}"
+
+      - name: Run strict cppcheck on library code
+        run: |
+          set -euxo pipefail
+
+          cppcheck \
+            --enable=warning,performance,portability \
+            --std=c++20 \
+            --inconclusive \
+            --error-exitcode=2 \
+            --suppress=missingIncludeSystem \
+            --inline-suppr \
+            include/ src/
+
+      - name: Run strict cppcheck on tests
+        run: |
+          set -euxo pipefail
+
+          if [ -d tests ]; then
+            cppcheck \
+              --enable=warning,portability \
+              --std=c++20 \
+              --inconclusive \
+              --error-exitcode=2 \
+              --suppress=missingIncludeSystem \
+              --inline-suppr \
+              tests/
+          fi
+
+      - name: Report cppcheck style findings
+        run: |
+          set -euxo pipefail
+
+          cppcheck \
+            --enable=style \
+            --std=c++20 \
+            --suppress=missingIncludeSystem \
+            --inline-suppr \
+            include/ src/ tests/ || true
+
+  valgrind:
+    name: Valgrind Memory Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout engine repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $DEPS
+
+      - name: Fetch sibling JSON dependency
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf ../json
+          JSON_URL="https://github.com/vixcpp/json.git"
+
+          if git ls-remote --exit-code --heads "$JSON_URL" "$VIX_GIT_BRANCH" >/dev/null 2>&1; then
+            git clone --depth 1 --branch "$VIX_GIT_BRANCH" "$JSON_URL" ../json
+          else
+            git clone --depth 1 --branch main "$JSON_URL" ../json
+          fi
+
+          test -f ../json/CMakeLists.txt
+
+      - name: Configure Valgrind build
+        run: |
+          set -euxo pipefail
+
+          cmake -S . -B build-valgrind -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVIX_ENGINE_BUILD_TESTS=ON \
+            -DVIX_ENGINE_FETCH_JSON=OFF \
+            -DVIX_JSON_BUILD_TESTS=OFF \
+            -DVIX_JSON_BUILD_EXAMPLES=OFF
+
+      - name: Build Valgrind targets
+        run: |
+          set -euxo pipefail
+          cmake --build build-valgrind -j"${BUILD_JOBS}"
+
+      - name: Verify test discovery
+        run: |
+          set -euxo pipefail
+          ctest --test-dir build-valgrind -N
+
+      - name: Run Valgrind on CTest executables
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          ctest --test-dir build-valgrind --show-only=json-v1 > /tmp/engine-ctest.json
+
+          mapfile -t TEST_BINS < <(
+            python3 - <<'PY'
+          import json
+          import os
+
+          build_root = os.path.realpath("build-valgrind")
+
+          with open("/tmp/engine-ctest.json", "r", encoding="utf-8") as stream:
+              payload = json.load(stream)
+
+          binaries = set()
+
+          for test in payload.get("tests", []):
+              command = test.get("command") or []
+              if isinstance(command, str):
+                  command = [command]
+              if not command:
+                  continue
+
+              executable = command[0]
+              candidates = []
+
+              if os.path.isabs(executable):
+                  candidates.append(executable)
+              else:
+                  candidates.append(os.path.join(build_root, executable))
+                  candidates.append(os.path.realpath(executable))
+
+              for candidate in candidates:
+                  candidate = os.path.realpath(candidate)
+                  try:
+                      inside_build = os.path.commonpath([build_root, candidate]) == build_root
+                  except ValueError:
+                      inside_build = False
+
+                  if inside_build and os.path.isfile(candidate) and os.access(candidate, os.X_OK):
+                      binaries.add(candidate)
+                      break
+
+          for binary in sorted(binaries):
+              print(binary)
+          PY
+          )
+
+          if [ "${#TEST_BINS[@]}" -eq 0 ]; then
+            echo "::error::No native CTest executables were found for Valgrind."
+            exit 1
+          fi
+
+          FAIL=0
+
+          for exe in "${TEST_BINS[@]}"; do
+            echo "==> Valgrind: $exe"
+
+            set +e
+            timeout 120s valgrind \
+              --leak-check=full \
+              --show-leak-kinds=all \
+              --track-origins=yes \
+              --errors-for-leak-kinds=definite,indirect,possible \
+              --error-exitcode=99 \
+              "$exe"
+            STATUS=$?
+            set -e
+
+            if [ "$STATUS" -ne 0 ]; then
+              echo "::error::Valgrind failed for $exe with status $STATUS"
+              FAIL=1
+            fi
+          done
+
+          exit "$FAIL"
+
+  umbrella-contract:
+    name: Umbrella Build Contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout engine repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential \
+            cmake \
+            ninja-build \
+            git \
+            ca-certificates \
+            nlohmann-json3-dev
+
+      - name: Fetch sibling JSON dependency
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf ../json
+          JSON_URL="https://github.com/vixcpp/json.git"
+
+          if git ls-remote --exit-code --heads "$JSON_URL" "$VIX_GIT_BRANCH" >/dev/null 2>&1; then
+            git clone --depth 1 --branch "$VIX_GIT_BRANCH" "$JSON_URL" ../json
+          else
+            git clone --depth 1 --branch main "$JSON_URL" ../json
+          fi
+
+          test -f ../json/CMakeLists.txt
+
+      - name: Generate umbrella harness
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          HARNESS="$RUNNER_TEMP/vix-engine-umbrella"
+          rm -rf "$HARNESS"
+          mkdir -p "$HARNESS"
+
+          cat > "$HARNESS/CMakeLists.txt" <<EOF
+          cmake_minimum_required(VERSION 3.20)
+          project(vix_engine_umbrella_contract LANGUAGES CXX)
+
+          set(CMAKE_CXX_STANDARD 20)
+          set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+          set(VIX_UMBRELLA_BUILD ON)
+          set(VIX_JSON_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+          set(VIX_JSON_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+          set(VIX_ENGINE_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+          set(VIX_ENGINE_FETCH_JSON OFF CACHE BOOL "" FORCE)
+
+          add_subdirectory("$GITHUB_WORKSPACE/../json" json)
+
+          if (NOT TARGET vix::json)
+            message(FATAL_ERROR "Umbrella contract: vix::json was not created.")
+          endif()
+
+          add_subdirectory("$GITHUB_WORKSPACE" engine)
+
+          if (NOT TARGET vix::engine)
+            message(FATAL_ERROR "Umbrella contract: vix::engine was not created.")
+          endif()
+
+          add_executable(vix_engine_umbrella_smoke main.cpp)
+          target_link_libraries(vix_engine_umbrella_smoke PRIVATE vix::engine)
+          EOF
+
+          cat > "$HARNESS/main.cpp" <<'EOF'
+          int main()
+          {
+            return 0;
+          }
+          EOF
+
+      - name: Configure umbrella harness
+        run: |
+          set -euxo pipefail
+          cmake -S "$RUNNER_TEMP/vix-engine-umbrella" \
+            -B "$RUNNER_TEMP/vix-engine-umbrella/build" \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build umbrella harness
+        run: |
+          set -euxo pipefail
+          cmake --build "$RUNNER_TEMP/vix-engine-umbrella/build" -j"${BUILD_JOBS}"
+
+      - name: Run umbrella smoke executable
+        run: |
+          set -euxo pipefail
+          "$RUNNER_TEMP/vix-engine-umbrella/build/vix_engine_umbrella_smoke"
+
+  package-export:
+    name: Package Export and Consumer Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout engine repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          set -euxo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $DEPS
+
+      - name: Fetch sibling JSON dependency
+        shell: bash
+        run: |
+          set -euxo pipefail
+          rm -rf ../json
+          JSON_URL="https://github.com/vixcpp/json.git"
+
+          if git ls-remote --exit-code --heads "$JSON_URL" "$VIX_GIT_BRANCH" >/dev/null 2>&1; then
+            git clone --depth 1 --branch "$VIX_GIT_BRANCH" "$JSON_URL" ../json
+          else
+            git clone --depth 1 --branch main "$JSON_URL" ../json
+          fi
+
+          test -f ../json/CMakeLists.txt
+
+      - name: Configure installable package
+        run: |
+          set -euxo pipefail
+
+          cmake -S . -B build-install -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_INSTALL_PREFIX="${PWD}/.ci-install" \
+            -DVIX_ENGINE_BUILD_TESTS=OFF \
+            -DVIX_ENGINE_FETCH_JSON=OFF \
+            -DVIX_JSON_BUILD_TESTS=OFF \
+            -DVIX_JSON_BUILD_EXAMPLES=OFF
+
+      - name: Build installable package
+        run: |
+          set -euxo pipefail
+          cmake --build build-install -j"${BUILD_JOBS}"
+
+      - name: Install package
+        run: |
+          set -euxo pipefail
+          cmake --install build-install
+
+      - name: Verify installed engine files
+        run: |
+          set -euxo pipefail
+
+          find .ci-install -maxdepth 8 -type f | sort
+
+          test -d .ci-install/include/vix
+          test -f .ci-install/lib/libvix_engine.a
+          test -f .ci-install/lib/cmake/vix_engine/vix_engineConfig.cmake
+          test -f .ci-install/lib/cmake/vix_engine/vix_engineConfigVersion.cmake
+          test -f .ci-install/lib/cmake/vix_engine/vix_engineTargets.cmake
+
+      - name: Generate installed-package consumer
+        shell: bash
+        run: |
+          set -euxo pipefail
+
+          rm -rf .ci-consumer
+          mkdir -p .ci-consumer
+
+          HEADER=""
+
+          for candidate in \
+            .ci-install/include/vix/engine.hpp \
+            .ci-install/include/vix/engine/api.hpp; do
+            if [ -f "$candidate" ]; then
+              HEADER="$candidate"
+              break
+            fi
+          done
+
+          if [ -z "$HEADER" ]; then
+            HEADER="$(find .ci-install/include/vix -type f \( -name '*.hpp' -o -name '*.h' \) | sort | head -n 1)"
+          fi
+
+          if [ -z "$HEADER" ] || [ ! -f "$HEADER" ]; then
+            echo "::error::No installed engine header was found."
+            exit 1
+          fi
+
+          RELATIVE_HEADER="${HEADER#.ci-install/include/}"
+          echo "Using installed header: $RELATIVE_HEADER"
+
+          cat > .ci-consumer/CMakeLists.txt <<'EOF'
+          cmake_minimum_required(VERSION 3.20)
+          project(vix_engine_consumer LANGUAGES CXX)
+
+          set(CMAKE_CXX_STANDARD 20)
+          set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+          find_package(vix_engine CONFIG REQUIRED)
+
+          add_executable(vix_engine_consumer main.cpp)
+          target_link_libraries(vix_engine_consumer PRIVATE vix::engine)
+          EOF
+
+          cat > .ci-consumer/main.cpp <<EOF
+          #include <$RELATIVE_HEADER>
+
+          int main()
+          {
+            return 0;
+          }
+          EOF
+
+      - name: Configure installed-package consumer
+        run: |
+          set -euxo pipefail
+
+          cmake -S .ci-consumer -B .ci-consumer/build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="${PWD}/.ci-install"
+
+      - name: Build installed-package consumer
+        run: |
+          set -euxo pipefail
+          cmake --build .ci-consumer/build -j"${BUILD_JOBS}"
+
+      - name: Run installed-package consumer
+        run: |
+          set -euxo pipefail
+          .ci-consumer/build/vix_engine_consumer
+
+  summary:
+    name: Engine Strict CI Summary
+    needs:
+      - sanitized-tests
+      - fetchcontent-fallback
+      - release-tests
+      - static-analysis
+      - valgrind
+      - umbrella-contract
+      - package-export
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "Engine strict CI completed successfully."
+          echo "- GCC and Clang sanitized tests"
+          echo "- Sibling vix::json integration"
+          echo "- System nlohmann_json fallback"
+          echo "- FetchContent JSON fallback"
+          echo "- Release build and tests"
+          echo "- Strict static analysis"
+          echo "- Valgrind memory checks"
+          echo "- Umbrella build contract"
+          echo "- Package export and installed consumer"
