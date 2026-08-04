@@ -57,7 +57,7 @@ namespace vix::engine::detail
     names.emplace_back(name);
 
 #ifdef _WIN32
-    const fs::path input(std::string(name));
+    const fs::path input{std::string(name)};
     if (input.has_extension())
       return names;
 
