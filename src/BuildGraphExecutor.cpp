@@ -17,6 +17,7 @@
 #include <vix/engine/BuildGraphExecutor.hpp>
 
 #include <algorithm>
+#include <atomic>
 #include <exception>
 #include <string>
 #include <unordered_map>
@@ -87,16 +88,24 @@ namespace vix::engine
         BuildGraphExecutorEventKind kind,
         const std::string &message,
         const std::string &target,
-        const std::string &taskId = {})
+        const std::string &taskId = {},
+        std::size_t current = 0,
+        std::size_t total = 0)
     {
       if (!dependencies.onEvent)
         return;
 
       BuildGraphExecutorEvent event;
+
       event.kind = kind;
+
       event.message = message;
       event.target = target;
       event.taskId = taskId;
+
+      event.current = current;
+      event.total = total;
+
       dependencies.onEvent(event);
     }
 
@@ -716,16 +725,29 @@ namespace vix::engine
       BuildScheduler scheduler(schedulerOptions);
       scheduler.add_tasks(dirtyCompileTasks);
 
+      std::atomic<std::size_t> startedCompileTasks{0};
+
+      const std::size_t totalCompileTasks =
+          dirtyCompileTasks.size();
+
       const BuildSchedulerResult compileResult =
           scheduler.run(
               [&](BuildTask &task)
               {
+                const std::size_t currentCompileTask =
+                    startedCompileTasks.fetch_add(
+                        1,
+                        std::memory_order_relaxed) +
+                    1;
+
                 emit_event(
                     dependencies_,
                     BuildGraphExecutorEventKind::CompilingTask,
                     "graph: compile " + task.id,
                     options_.target,
-                    task.id);
+                    task.id,
+                    currentCompileTask,
+                    totalCompileTasks);
 
                 BuildTaskResult taskResult =
                     run_cached_compile_task(
@@ -741,7 +763,9 @@ namespace vix::engine
                       BuildGraphExecutorEventKind::CacheHit,
                       taskResult.output,
                       options_.target,
-                      task.id);
+                      task.id,
+                      currentCompileTask,
+                      totalCompileTasks);
                 }
 
                 return taskResult;

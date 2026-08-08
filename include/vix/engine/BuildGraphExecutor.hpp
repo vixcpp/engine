@@ -23,6 +23,7 @@
 #include <optional>
 #include <string>
 #include <vector>
+#include <cstddef>
 
 #include <vix/engine/BuildGraph.hpp>
 #include <vix/engine/BuildScheduler.hpp>
@@ -60,9 +61,9 @@ namespace vix::engine
    */
   struct BuildGraphExecutorOptions
   {
-    fs::path buildDir;   ///< Build directory containing Ninja and graph outputs
-    std::string target;  ///< Requested output target
-    int jobs{0};         ///< Compile scheduler jobs. 0 means auto.
+    fs::path buildDir;  ///< Build directory containing Ninja and graph outputs
+    std::string target; ///< Requested output target
+    int jobs{0};        ///< Compile scheduler jobs. 0 means auto.
 
     /**
      * @brief Allow delegation to Ninja when direct graph execution is unsafe.
@@ -127,9 +128,13 @@ namespace vix::engine
   struct BuildGraphExecutorEvent
   {
     BuildGraphExecutorEventKind kind{BuildGraphExecutorEventKind::Completed};
+
     std::string message; ///< Neutral event message
     std::string taskId;  ///< Related task id, when any
     std::string target;  ///< Related target, when any
+
+    std::size_t current{0}; ///< Current operation index, when known
+    std::size_t total{0};   ///< Total operation count, when known
   };
 
   using BuildGraphCompileExecutor =
@@ -175,8 +180,8 @@ namespace vix::engine
     std::size_t executedCompileTasks{0}; ///< Executed compile tasks
     std::size_t skippedCompileTasks{0};  ///< Cache-skipped compile tasks
 
-    int exitCode{0};       ///< Final exit code
-    std::string output;    ///< Accumulated neutral output
+    int exitCode{0};    ///< Final exit code
+    std::string output; ///< Accumulated neutral output
 
     /**
      * @brief Check whether the graph executor completed successfully.
