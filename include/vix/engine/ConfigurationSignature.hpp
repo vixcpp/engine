@@ -24,7 +24,6 @@ namespace vix::engine
     std::string targetTriple;
     std::string sysroot;
 
-    bool fast{false};
     bool useCache{true};
     bool warningCheck{false};
 

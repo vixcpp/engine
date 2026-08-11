@@ -25,7 +25,6 @@ int main()
         "static=0\n"
         "targetTriple=\n"
         "sysroot=\n"
-        "fast=0\n"
         "useCache=1\n"
         "warningCheck=0\n"
         "linker=0\n"
@@ -56,7 +55,6 @@ int main()
     options.linkStatic = true;
     options.targetTriple = "aarch64-linux-gnu";
     options.sysroot = "/opt/sys root";
-    options.fast = true;
     options.useCache = false;
     options.warningCheck = true;
     options.linker = LinkerMode::Mold;
@@ -75,7 +73,6 @@ int main()
         "static=1\n"
         "targetTriple=aarch64-linux-gnu\n"
         "sysroot=/opt/sys root\n"
-        "fast=1\n"
         "useCache=0\n"
         "warningCheck=1\n"
         "linker=2\n"

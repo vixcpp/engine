@@ -55,7 +55,6 @@ namespace vix::engine
     oss << "static=" << (options.linkStatic ? "1" : "0") << "\n";
     oss << "targetTriple=" << options.targetTriple << "\n";
     oss << "sysroot=" << options.sysroot << "\n";
-    oss << "fast=" << (options.fast ? "1" : "0") << "\n";
     oss << "useCache=" << (options.useCache ? "1" : "0") << "\n";
     oss << "warningCheck=" << (options.warningCheck ? "1" : "0") << "\n";
     oss << "linker=" << static_cast<int>(options.linker) << "\n";
