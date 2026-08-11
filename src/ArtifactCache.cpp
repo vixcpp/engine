@@ -1307,12 +1307,6 @@ namespace vix::engine
       return false;
 #endif
 
-    if (state.artifactRoot.empty())
-      return false;
-
-    if (!dir_exists(state.artifactRoot))
-      return false;
-
     return true;
   }
 
