@@ -15,6 +15,7 @@
  */
 
 #include <vix/engine/BuildScheduler.hpp>
+#include <vix/engine/BuildParallelism.hpp>
 
 #include <algorithm>
 #include <condition_variable>
@@ -501,15 +502,7 @@ namespace vix::engine
 
   int BuildScheduler::default_jobs()
   {
-    unsigned int hc = std::thread::hardware_concurrency();
-
-    if (hc == 0)
-      return 4;
-
-    if (hc > 64)
-      hc = 64;
-
-    return static_cast<int>(hc);
+    return default_build_jobs();
   }
 
   bool BuildScheduler::task_finished_successfully(const std::string &taskId) const

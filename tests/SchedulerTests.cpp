@@ -1,4 +1,5 @@
 #include <vix/engine/BuildScheduler.hpp>
+#include <vix/engine/BuildParallelism.hpp>
 
 #include <atomic>
 #include <condition_variable>
@@ -236,6 +237,10 @@ namespace
   static void test_automatic_jobs()
   {
     require(BuildScheduler::default_jobs() >= 1, "default jobs positive");
+    require(recommended_build_jobs(1) == 1, "one thread keeps one build job");
+    require(recommended_build_jobs(2) == 1, "two threads reserve one for the system");
+    require(recommended_build_jobs(4) == 3, "four threads reserve interactive capacity");
+    require(recommended_build_jobs(8) == 6, "eight threads do not saturate the machine");
 
     BuildScheduler scheduler(BuildSchedulerOptions{0, true, true});
     scheduler.add_task(task("a"));
