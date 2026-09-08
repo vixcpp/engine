@@ -24,14 +24,9 @@ namespace vix::engine
     std::string targetTriple;
     std::string sysroot;
 
-    bool useCache{true};
     bool warningCheck{false};
 
     LinkerMode linker{LinkerMode::Auto};
-    LauncherMode launcher{LauncherMode::Auto};
-
-    bool verbose{false};
-    bool cmakeVerbose{false};
 
     std::vector<std::string> rawCMakeArgs;
     std::string toolchainContent;

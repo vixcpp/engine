@@ -55,15 +55,8 @@ namespace vix::engine
     oss << "static=" << (options.linkStatic ? "1" : "0") << "\n";
     oss << "targetTriple=" << options.targetTriple << "\n";
     oss << "sysroot=" << options.sysroot << "\n";
-    oss << "useCache=" << (options.useCache ? "1" : "0") << "\n";
     oss << "warningCheck=" << (options.warningCheck ? "1" : "0") << "\n";
     oss << "linker=" << static_cast<int>(options.linker) << "\n";
-    oss << "launcher=" << static_cast<int>(options.launcher) << "\n";
-    oss << "verbose=" << (options.verbose ? "1" : "0") << "\n";
-    oss << "cmakeVerbose=" << (options.cmakeVerbose ? "1" : "0") << "\n";
-
-    if (plan.launcher)
-      oss << "launcherTool=" << *plan.launcher << "\n";
 
     if (plan.fastLinkerFlag)
       oss << "linkerFlag=" << *plan.fastLinkerFlag << "\n";

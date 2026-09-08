@@ -25,12 +25,8 @@ int main()
         "static=0\n"
         "targetTriple=\n"
         "sysroot=\n"
-        "useCache=1\n"
         "warningCheck=0\n"
         "linker=0\n"
-        "launcher=0\n"
-        "verbose=0\n"
-        "cmakeVerbose=0\n"
         "projectFingerprint=fingerprint\n"
         "vars:\n"
         "rawCMakeArgs:\n";
@@ -45,7 +41,6 @@ int main()
   {
     ExecutionPlan p = plan();
     p.preset = Preset{"release", "Ninja", "Release", "build-release"};
-    p.launcher = "ccache";
     p.fastLinkerFlag = "-fuse-ld=mold";
     p.cmakeVars = {
         {"Z_VAR", "last"},
@@ -55,12 +50,8 @@ int main()
     options.linkStatic = true;
     options.targetTriple = "aarch64-linux-gnu";
     options.sysroot = "/opt/sys root";
-    options.useCache = false;
     options.warningCheck = true;
     options.linker = LinkerMode::Mold;
-    options.launcher = LauncherMode::Ccache;
-    options.verbose = true;
-    options.cmakeVerbose = true;
     options.rawCMakeArgs = {
         "-DFOO=bar baz",
         "-DQUOTE=\"yes\""};
@@ -73,13 +64,8 @@ int main()
         "static=1\n"
         "targetTriple=aarch64-linux-gnu\n"
         "sysroot=/opt/sys root\n"
-        "useCache=0\n"
         "warningCheck=1\n"
         "linker=2\n"
-        "launcher=3\n"
-        "verbose=1\n"
-        "cmakeVerbose=1\n"
-        "launcherTool=ccache\n"
         "linkerFlag=-fuse-ld=mold\n"
         "projectFingerprint=fingerprint\n"
         "vars:\n"
@@ -103,12 +89,6 @@ int main()
     options.linker = LinkerMode::Lld;
     assert(make_configuration_signature(plan(), options).find("linker=3\n") != std::string::npos);
 
-    options.launcher = LauncherMode::None;
-    assert(make_configuration_signature(plan(), options).find("launcher=1\n") != std::string::npos);
-    options.launcher = LauncherMode::Sccache;
-    assert(make_configuration_signature(plan(), options).find("launcher=2\n") != std::string::npos);
-    options.launcher = LauncherMode::Ccache;
-    assert(make_configuration_signature(plan(), options).find("launcher=3\n") != std::string::npos);
   }
 
   {
@@ -119,6 +99,29 @@ int main()
     options.targetTriple = "x86_64-linux-gnu";
     options.toolchainContent = "line\n";
     assert(make_configuration_signature(plan(), options).find("toolchain:\nline\n") != std::string::npos);
+  }
+
+  {
+    const ConfigurationSignatureOptions baseOptions;
+    const std::string base = make_configuration_signature(plan(), baseOptions);
+
+    ExecutionPlan changedBuildType = plan();
+    changedBuildType.preset.buildType = "Release";
+    assert(make_configuration_signature(changedBuildType, baseOptions) != base);
+
+    ExecutionPlan changedVariables = plan();
+    changedVariables.cmakeVars = {{"VIX_FEATURE", "enabled"}};
+    assert(make_configuration_signature(changedVariables, baseOptions) != base);
+
+    ConfigurationSignatureOptions changedTarget = baseOptions;
+    changedTarget.targetTriple = "aarch64-linux-gnu";
+    assert(make_configuration_signature(plan(), changedTarget) != base);
+
+    changedTarget.toolchainContent = "set(CMAKE_SYSTEM_NAME Linux)";
+    const std::string targetWithToolchain =
+        make_configuration_signature(plan(), changedTarget);
+    changedTarget.toolchainContent = "set(CMAKE_SYSTEM_NAME Generic)";
+    assert(make_configuration_signature(plan(), changedTarget) != targetWithToolchain);
   }
 
   return 0;
