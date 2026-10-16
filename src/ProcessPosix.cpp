@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cerrno>
+#include <cstddef>
 #include <cstring>
 #include <fcntl.h>
 #include <map>
@@ -24,6 +25,24 @@ namespace vix::engine::process
     {
       if (fd >= 0)
         ::close(fd);
+    }
+
+    static void write_child_error_code_or_exit(int fd, int code) noexcept
+    {
+      const auto *bytes = reinterpret_cast<const unsigned char *>(&code);
+      std::size_t offset = 0;
+      while (offset < sizeof(code))
+      {
+        const ssize_t written = ::write(fd, bytes + offset, sizeof(code) - offset);
+        if (written > 0)
+        {
+          offset += static_cast<std::size_t>(written);
+          continue;
+        }
+        if (written < 0 && errno == EINTR)
+          continue;
+        _exit(127);
+      }
     }
 
     static bool set_close_on_exec(int fd) noexcept
@@ -238,7 +257,7 @@ namespace vix::engine::process
       if (::dup2(stdoutPipe[1], STDOUT_FILENO) < 0)
       {
         const int code = errno;
-        (void)::write(errorPipe[1], &code, sizeof(code));
+        write_child_error_code_or_exit(errorPipe[1], code);
         _exit(127);
       }
 
@@ -247,7 +266,7 @@ namespace vix::engine::process
         if (::dup2(stdoutPipe[1], STDERR_FILENO) < 0)
         {
           const int code = errno;
-          (void)::write(errorPipe[1], &code, sizeof(code));
+          write_child_error_code_or_exit(errorPipe[1], code);
           _exit(127);
         }
       }
@@ -257,7 +276,7 @@ namespace vix::engine::process
         if (::dup2(stderrPipe[1], STDERR_FILENO) < 0)
         {
           const int code = errno;
-          (void)::write(errorPipe[1], &code, sizeof(code));
+          write_child_error_code_or_exit(errorPipe[1], code);
           _exit(127);
         }
       }
@@ -269,7 +288,7 @@ namespace vix::engine::process
           ::chdir(command.workingDirectory.c_str()) != 0)
       {
         const int code = errno;
-        (void)::write(errorPipe[1], &code, sizeof(code));
+        write_child_error_code_or_exit(errorPipe[1], code);
         _exit(127);
       }
 
@@ -296,7 +315,7 @@ namespace vix::engine::process
       }
 
       const int code = errno;
-      (void)::write(errorPipe[1], &code, sizeof(code));
+      write_child_error_code_or_exit(errorPipe[1], code);
       _exit(127);
     }
 
